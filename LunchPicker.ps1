@@ -12,13 +12,50 @@
 #constants
 $URL_BASE = "https://www.yelp.com/search?find_desc=Restaurants&find_loc=Ann+Arbor,+MI&start="
 $NUM_PER_PAGE = 10
-$NUM_RESTAURANTS = 20
-$NUM_PAGES = $NUM_RESTAURANTS / $NUM_PER_PAGE
 
 #functions
-function FormatName {
-    param([String] $restName)
+function LoadPage([ref] $resList, [ref] $resLocList, [int] $startIndex) {
+    "Loading restaurants $($startIndex + 1) to $($startIndex + $NUM_PER_PAGE)..." | Out-Host
 
+    #get url
+    $url = $URL_BASE + $startIndex
+    $html = Invoke-WebRequest -Uri $url
+
+    #get name
+    $resList.Value += ($HTML.ParsedHtml.getElementsByTagName("span") | Where {$_.className -eq "indexed-biz-name"}).innerText
+    
+    #get address
+    $resLocList.Value += ($html.ParsedHtml.getElementsByTagName("div") | Where {$_.className -eq "secondary-attributes"}).innerText
+}
+
+function FormatPage([ref] $resList, [ref] $resLocList, [ref] $resListFormatted, [int] $startIndex) {
+    for ($i = $startIndex; $i -lt $resList.Value.Count; ++$i) {
+        $name = $resList.Value[$i]
+        $index = $name.IndexOf(".")
+        $name = $name.Substring($index + 2)
+        $resList.Value[$i] = $name
+
+        #format names
+        $name = FormatName $name
+        $resListFormatted.Value += $name
+
+        #format addresses
+        $index = $resLocList.Value[$i].IndexOf("Phone")
+        if ($index -ge 0) {
+            $resLocList.Value[$i] = $resLocList.Value[$i].Substring(0, $index)
+        }
+    }
+}
+
+function GetPage([ref] $resList, [ref] $resLocList, [ref] $resListFormatted, [ref] $startIndex) {
+    LoadPage -resList $resList -resLocList $resLocList -startIndex $startIndex.Value
+
+    FormatPage -resList $resList -resLocList $resLocList -resListFormatted $resListFormatted -startIndex $startIndex.Value
+
+    $startIndex.Value += $NUM_PER_PAGE
+}
+
+function FormatName([String] $restName) {
     #make all lowercase
     $restName = $restName.ToLower()
 
@@ -42,9 +79,7 @@ function FormatName {
     return $restName
 }
 
-function FormatAddress {
-    param([String] $addr)
-
+function FormatAddress([String] $addr) {
     $addr = $addr -replace " ", "+"
 
     #remove last newline character
@@ -58,89 +93,44 @@ function FormatAddress {
     return $addr
 }
 
+function YelpButtonPressed([System.Windows.Forms.Label] $selectLabel) {
+    if ($selectLabel.Text -ne "") {
+        $index = $resList.IndexOf($selectLabel.Text)
+
+        $url = "https://www.yelp.com/biz/$($resListFormatted[$index])-ann-arbor?osq=Restaurants"
+        "Open: $url" | Out-Host
+
+        Start-Process -FilePath "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" -ArgumentList $url
+    }
+}
+
+function MapsButtonPressed([System.Windows.Forms.Label] $selectLabel) {
+    if ($selectLabel.Text -ne "") {
+        $i = $resList.IndexOf($selectLabel.Text)
+
+        $url = "https://www.google.com/maps/place/$(FormatAddress $resLocList[$i])"
+        "Open: $url" | Out-Host
+
+        Start-Process -FilePath "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" -ArgumentList $url
+    }
+}
+
+function RandomButtonPressed([System.Array] $resList, [System.Windows.Forms.ListBox] $choicesListBox) {
+    $rand = Get-Random -Minimum 0 -Maximum ($resList.Count - 1)
+
+    return $resList[$rand]
+}
+
 
 #variables
 $resList = @()
 $resListFormatted = @()
 $resLocList = @()
+$resIndex = 0
 
 
-#get restaurant list and locations
-for ($i = 0; $i -lt $NUM_PER_PAGE * $NUM_PAGES; $i += $NUM_PER_PAGE) {
-    "Loading restaurants $($i+1) to $($i + $NUM_PER_PAGE)..." | Out-Host
-
-    $url = $URL_BASE + $i
-    $html = Invoke-WebRequest -Uri $url
-
-    #get name
-    $resList += ($HTML.ParsedHtml.getElementsByTagName("span") | Where {$_.className -eq "indexed-biz-name"}).innerText
-    
-    #get address
-    $resLocList += ($html.ParsedHtml.getElementsByTagName("div") | Where {$_.className -eq "secondary-attributes"}).innerText
-}
-
-#get only the restaurant names and locations
-for ($i = 0; $i -lt $resList.Count; ++$i) {
-    $name = $resList[$i]
-    $index = $name.IndexOf(".")
-    $name = $name.Substring($index + 2)
-    $resList[$i] = $name
-
-    #format names
-    $name = FormatName $name
-    $resListFormatted += $name
-
-    #format addresses
-    $index = $resLocList[$i].IndexOf("Phone")
-    if ($index -ge 0) {
-        $resLocList[$i] = $resLocList[$i].Substring(0, $index)
-    }
-}
-
-
-#open one link
-<#
-$i = 0
-$link = "https://www.yelp.com/biz/$($resListFormatted[$i])-ann-arbor?osq=Restaurants"
-$link | Out-Host
-
-Start-Process -FilePath "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" -ArgumentList $link
-#>
-
-#open all links
-<#
-for ($i = 0; $i -lt $NUM_RESTAURANTS; ++$i) {
-    $link = "https://www.yelp.com/biz/$($resListFormatted[$i])-ann-arbor?osq=Restaurants"
-    $link | Out-Host
-
-    Start-Process -FilePath "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" -ArgumentList $link
-}
-#>
-
-#open one google maps location
-<#
-$i = 0
-$url3 = "https://www.google.com/maps/place/$(FormatAddress $resLocList[$i])"
-Start-Process -FilePath "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" -ArgumentList $url3
-#>
-
-#open all google maps locations
-<#
-for ($i = 0; $i -lt $resLocList.Length; ++$i) {
-    $url3 = "https://www.google.com/maps/place/$(FormatAddress $resLocList[$i])"
-    Start-Process -FilePath "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" -ArgumentList $url3
-}
-#>
-
-
-#output
-<#
-"`n" | Out-Host
-$resList
-
-"`n" | Out-Host
-$resLocList
-#>
+#get initial page
+GetPage -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -startIndex ([ref] $resIndex)
 
 
 #-------------------------------------------------------
@@ -180,7 +170,7 @@ for ($i = 0; $i -lt $resList.Count; ++$i) {
 #select label
 $selectLabel = New-Object System.Windows.Forms.Label
 $selectLabel.Font = $FONT_BOLD
-$selectLabel.Text = "[Selection]"
+$selectLabel.Text = ""
 $selectLabel.Size = New-Object System.Drawing.Size(350, 25)
 $selectLabel.Location = New-Object System.Drawing.Point(9, 202)
 
@@ -190,6 +180,13 @@ $selectButton.Font = $FONT_BOLD
 $selectButton.Text = "Select"
 $selectButton.Size = New-Object System.Drawing.Size(100, 25)
 $selectButton.Location = New-Object System.Drawing.Point(9, 233)
+$selectButton.Add_Click({
+    if ($choicesListBox.SelectedIndex -ge 0) {
+        $selected = $choicesListBox.SelectedItem
+        $selectLabel.Text = $selected
+        "Selected: $selected" | Out-Host
+    }
+})
 
 #yelp button
 $yelpButton = New-Object System.Windows.Forms.Button
@@ -197,6 +194,7 @@ $yelpButton.Font = $FONT_BOLD
 $yelpButton.Text = "Yelp Page"
 $yelpButton.Size = New-Object System.Drawing.Size(100, 25)
 $yelpButton.Location = New-Object System.Drawing.Point(114, 233)
+$yelpButton.Add_Click({YelpButtonPressed -selectLabel $selectLabel})
 
 #google maps button
 $mapsButton = New-Object System.Windows.Forms.Button
@@ -204,6 +202,7 @@ $mapsButton.Font = $FONT_BOLD
 $mapsButton.Text = "Google Maps"
 $mapsButton.Size = New-Object System.Drawing.Size(125, 25)
 $mapsButton.Location = New-Object System.Drawing.Point(219, 233)
+$mapsButton.Add_Click({MapsButtonPressed -selectLabel $selectLabel})
 
 #more options button
 $moreOptionsButton = New-Object System.Windows.Forms.Button
@@ -211,6 +210,21 @@ $moreOptionsButton.Font = $FONT_BOLD
 $moreOptionsButton.Text = "Get More Options"
 $moreOptionsButton.Size = New-Object System.Drawing.Size(155, 25)
 $moreOptionsButton.Location = New-Object System.Drawing.Point(9, 264)
+$moreOptionsButton.Add_Click({
+    $selectLabel.Text = "Please Wait..."
+    
+    #get page
+    GetPage -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -startIndex ([ref] $resIndex)
+    
+    #add new options
+    for ($i = $resIndex - $NUM_PER_PAGE; $i -lt $resList.Count; ++$i) {
+        $choicesListBox.Items.Add($resList[$i])
+    }
+
+    $choicesListBox.Refresh()
+
+    $selectLabel.Text = ""
+})
 
 #random selection button
 $randomButton = New-Object System.Windows.Forms.Button
@@ -218,6 +232,7 @@ $randomButton.Font = $FONT_BOLD
 $randomButton.Text = "Random"
 $randomButton.Size = New-Object System.Drawing.Size(100, 25)
 $randomButton.Location = New-Object System.Drawing.Point(169, 264)
+$randomButton.Add_Click({$selectLabel.Text = RandomButtonPressed -resList $resList -choicesListBox $choicesListBox})
 
 #close button
 $closeButton = New-Object System.Windows.Forms.Button
@@ -225,6 +240,7 @@ $closeButton.Font = $FONT_BOLD
 $closeButton.Text = "Close"
 $closeButton.Size = New-Object System.Drawing.Size(70, 25)
 $closeButton.Location = New-Object System.Drawing.Point(274, 264)
+$closeButton.Add_Click({$mainForm.Close()})
 
 #add items to main form
 $mainForm.Controls.Add($choicesListBox)
