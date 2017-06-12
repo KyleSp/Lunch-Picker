@@ -4,17 +4,15 @@
 
 #TODO: make it be able to work with any city
 #TODO: random choice button and use text file for history for ones that are chosen (to know to ignore them for future random guesses)
-#TODO: have button to load more options
 #TODO: have delete history button
-#TODO: scrollable list for options (insert options in random order into list)
-#TODO: have buttons for opening yelp page and google maps page after selecting an option
+#TODO: download images of each place and display it after selection
 
 #constants
 $URL_BASE = "https://www.yelp.com/search?find_desc=Restaurants&find_loc=Ann+Arbor,+MI&start="
 $NUM_PER_PAGE = 10
 
 #functions
-function LoadPage([ref] $resList, [ref] $resLocList, [int] $startIndex) {
+function LoadPage([ref] $resList, [ref] $resLocList, [ref] $imgList, [int] $startIndex) {
     "Loading restaurants $($startIndex + 1) to $($startIndex + $NUM_PER_PAGE)..." | Out-Host
 
     #get url
@@ -26,6 +24,9 @@ function LoadPage([ref] $resList, [ref] $resLocList, [int] $startIndex) {
     
     #get address
     $resLocList.Value += ($html.ParsedHtml.getElementsByTagName("div") | Where {$_.className -eq "secondary-attributes"}).innerText
+
+    #get image
+    $imgList.Value += ($html.ParsedHtml.getElementsByTagName("img") | Where {$_.className -eq "photo-box-img" -and $_.naturalHeight -eq 90}).src
 }
 
 function FormatPage([ref] $resList, [ref] $resLocList, [ref] $resListFormatted, [int] $startIndex) {
@@ -47,8 +48,8 @@ function FormatPage([ref] $resList, [ref] $resLocList, [ref] $resListFormatted, 
     }
 }
 
-function GetPage([ref] $resList, [ref] $resLocList, [ref] $resListFormatted, [ref] $startIndex) {
-    LoadPage -resList $resList -resLocList $resLocList -startIndex $startIndex.Value
+function GetPage([ref] $resList, [ref] $resLocList, [ref] $resListFormatted, [ref] $imgList, [ref] $startIndex) {
+    LoadPage -resList $resList -resLocList $resLocList -imgList $imgList -startIndex $startIndex.Value
 
     FormatPage -resList $resList -resLocList $resLocList -resListFormatted $resListFormatted -startIndex $startIndex.Value
 
@@ -93,6 +94,25 @@ function FormatAddress([String] $addr) {
     return $addr
 }
 
+function FormatImg([String] $img, [ref] $fileLoc) {
+    #get directory of image to make in PSScriptRoot
+    $split = $img.Split("/")
+
+    $dir = "$PSScriptRoot\Images\$($split[-2])\"
+    $fileName = $split[-1]
+    $fileLoc.Value = $dir + $fileName
+
+    #make directory
+    if (!(Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir
+    } else {
+        return
+    }
+
+    #download file
+    Invoke-WebRequest -Uri $img -OutFile $fileLoc.Value
+}
+
 function YelpButtonPressed([System.Windows.Forms.Label] $selectLabel) {
     if ($selectLabel.Text -ne "") {
         $index = $resList.IndexOf($selectLabel.Text)
@@ -121,16 +141,16 @@ function RandomButtonPressed([System.Array] $resList, [System.Windows.Forms.List
     return $resList[$rand]
 }
 
-
 #variables
 $resList = @()
 $resListFormatted = @()
 $resLocList = @()
+$imgList = @()
 $resIndex = 0
 
 
 #get initial page
-GetPage -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -startIndex ([ref] $resIndex)
+GetPage -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -imgList ([ref] $imgList) -startIndex ([ref] $resIndex)
 
 
 #-------------------------------------------------------
@@ -144,7 +164,7 @@ Add-Type -AssemblyName System.Drawing
 $FONT = New-Object System.Drawing.Font("Arial", 12)
 $FONT_BOLD = New-Object System.Drawing.Font("Arial", 12, [System.Drawing.FontStyle]::Bold)
 $FORM_MAIN_TEXT = "Lunch Picker"
-$FORM_MAIN_SIZE_X = 385
+$FORM_MAIN_SIZE_X = 485
 $FORM_MAIN_SIZE_Y = 337
 
 #main form
@@ -167,26 +187,28 @@ for ($i = 0; $i -lt $resList.Count; ++$i) {
     $choicesListBox.Items.Add($resList[$i])
 }
 
+$choicesListBox.Add_Click({
+    $selected = $choicesListBox.SelectedItem
+    $selectLabel.Text = $selected
+    "Selected: $selected" | Out-Host
+
+    $index = $resList.IndexOf($selected)
+    
+    [String] $fileLoc = ""
+    
+    FormatImg $imgList[$index] ([ref] $fileLoc)
+
+    $image = [system.drawing.image]::FromFile($fileLoc)
+    $optionImage.BackgroundImage = $image
+    $optionImage.BackgroundImageLayout = "None"
+})
+
 #select label
 $selectLabel = New-Object System.Windows.Forms.Label
 $selectLabel.Font = $FONT_BOLD
 $selectLabel.Text = ""
 $selectLabel.Size = New-Object System.Drawing.Size(350, 25)
 $selectLabel.Location = New-Object System.Drawing.Point(9, 202)
-
-#select button
-$selectButton = New-Object System.Windows.Forms.Button
-$selectButton.Font = $FONT_BOLD
-$selectButton.Text = "Select"
-$selectButton.Size = New-Object System.Drawing.Size(100, 25)
-$selectButton.Location = New-Object System.Drawing.Point(9, 233)
-$selectButton.Add_Click({
-    if ($choicesListBox.SelectedIndex -ge 0) {
-        $selected = $choicesListBox.SelectedItem
-        $selectLabel.Text = $selected
-        "Selected: $selected" | Out-Host
-    }
-})
 
 #yelp button
 $yelpButton = New-Object System.Windows.Forms.Button
@@ -214,7 +236,7 @@ $moreOptionsButton.Add_Click({
     $selectLabel.Text = "Please Wait..."
     
     #get page
-    GetPage -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -startIndex ([ref] $resIndex)
+    GetPage -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -imgList ([ref] $imgList) -startIndex ([ref] $resIndex)
     
     #add new options
     for ($i = $resIndex - $NUM_PER_PAGE; $i -lt $resList.Count; ++$i) {
@@ -232,7 +254,19 @@ $randomButton.Font = $FONT_BOLD
 $randomButton.Text = "Random"
 $randomButton.Size = New-Object System.Drawing.Size(100, 25)
 $randomButton.Location = New-Object System.Drawing.Point(169, 264)
-$randomButton.Add_Click({$selectLabel.Text = RandomButtonPressed -resList $resList -choicesListBox $choicesListBox})
+$randomButton.Add_Click({
+    $selectLabel.Text = RandomButtonPressed -resList $resList -choicesListBox $choicesListBox
+
+    $index = $resList.IndexOf($selectLabel.Text)
+    
+    [String] $fileLoc = ""
+    
+    FormatImg $imgList[$index] ([ref] $fileLoc)
+
+    $image = [system.drawing.image]::FromFile($fileLoc)
+    $optionImage.BackgroundImage = $image
+    $optionImage.BackgroundImageLayout = "None"
+})
 
 #close button
 $closeButton = New-Object System.Windows.Forms.Button
@@ -242,14 +276,20 @@ $closeButton.Size = New-Object System.Drawing.Size(70, 25)
 $closeButton.Location = New-Object System.Drawing.Point(274, 264)
 $closeButton.Add_Click({$mainForm.Close()})
 
+#option image
+$optionImage = New-Object System.Windows.Forms.Label
+$optionImage.Text = ""
+$optionImage.Size = New-Object System.Drawing.Size(90, 90)
+$optionImage.Location = New-Object System.Drawing.Point(370, 5)
+
 #add items to main form
 $mainForm.Controls.Add($choicesListBox)
 $mainForm.Controls.Add($selectLabel)
-$mainForm.Controls.Add($selectButton)
 $mainForm.Controls.Add($yelpButton)
 $mainForm.Controls.Add($mapsButton)
 $mainForm.Controls.Add($moreOptionsButton)
 $mainForm.Controls.Add($randomButton)
 $mainForm.Controls.Add($closeButton)
+$mainForm.Controls.Add($optionImage)
 
 $mainForm.ShowDialog()
