@@ -2,10 +2,8 @@
     Made By Kyle Spurlock
 #>
 
-#TODO: make it be able to work with any city
 #TODO: random choice button and use text file for history for ones that are chosen (to know to ignore them for future random guesses)
 #TODO: have delete history button
-#TODO: download images of each place and display it after selection
 
 #constants
 $URL_BASE = "https://www.yelp.com/search?find_desc=Restaurants&find_loc="
@@ -126,8 +124,6 @@ function YelpButtonPressed([String] $locationName, [System.Windows.Forms.Label] 
 
         $formattedLoc = FormatLocationName -locationName $locationName -replaceWith "-"
 
-        "yelp loc: $formattedLoc" | Out-Host
-
         $url = "https://www.yelp.com/biz/$($resListFormatted[$index])-$($formattedLoc)?osq=Restaurants"
         "Open: $url" | Out-Host
 
@@ -212,12 +208,14 @@ $searchButton.Add_Click({
 
         $locationName = $searchTextBox.Text
         Set-Variable -Name "locName" -Value $searchTextBox.Text -Scope Global
-        "location name (set): $locationName" | Out-Host
         
         #remove any old options
-        #TODO
-        #$choicesListBox.items.Clear()
-        #$resIndex = 0
+        $choicesListBox.items.Clear()
+        Set-Variable "resIndex" -Value 0 -Scope Global
+        Set-Variable "resList" -Value @() -Scope Global
+        Set-Variable "resListFormatted" -Value @() -Scope Global
+        Set-Variable "resLocList" -Value @() -Scope Global
+        Set-Variable "imgList" -Value @() -Scope Global
 
         #get page
         GetPage -locationName $locationName -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -imgList ([ref] $imgList) -startIndex ([ref] $resIndex)
@@ -230,8 +228,6 @@ $searchButton.Add_Click({
         $choicesListBox.Refresh()
 
         $selectLabel.Text = ""
-
-        "location name (set2): $locationName" | Out-Host
     }
 })
 
@@ -242,13 +238,6 @@ $choicesListBox.Size = New-Object System.Drawing.Size(350, 20)
 $choicesListBox.Location = New-Object System.Drawing.Point(10, 45)
 $choicesListBox.Height = 200
 
-#add choices to list box
-<#
-for ($i = 0; $i -lt $resList.Count; ++$i) {
-    $choicesListBox.Items.Add($resList[$i])
-}
-#>
-
 $choicesListBox.Add_Click({
     $selected = $choicesListBox.SelectedItem
     $selectLabel.Text = $selected
@@ -258,7 +247,7 @@ $choicesListBox.Add_Click({
     
     [String] $fileLoc = ""
     
-    FormatImg $imgList[$index] ([ref] $fileLoc)
+    FormatImg -img $imgList[$index] -fileLoc ([ref] $fileLoc)
 
     $image = [system.drawing.image]::FromFile($fileLoc)
     $optionImage.BackgroundImage = $image
@@ -302,7 +291,6 @@ $moreOptionsButton.Add_Click({
     $selectLabel.Text = "Please Wait..."
     
     #get page
-    #GetPage -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -imgList ([ref] $imgList) -startIndex ([ref] $resIndex)
     GetPage -locationName $locationName -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -imgList ([ref] $imgList) -startIndex ([ref] $resIndex)
 
     #add new options
