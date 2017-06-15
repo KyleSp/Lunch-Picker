@@ -57,6 +57,7 @@ function GetPage([string] $locationName, [ref] $resList, [ref] $resLocList, [ref
 }
 
 function FormatLocationName([String] $locationName, [String] $replaceWith) {
+    $locationName = $locationName.ToLower()
     $locationName = $locationName -replace " ", $replaceWith
     return $locationName
 }
@@ -156,11 +157,6 @@ $resLocList = @()
 $imgList = @()
 $resIndex = 0
 
-
-#get initial page
-#GetPage -locationName $locationName -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -imgList ([ref] $imgList) -startIndex ([ref] $resIndex)
-
-
 #-------------------------------------------------------
 #gui
 
@@ -173,7 +169,7 @@ $FONT = New-Object System.Drawing.Font("Arial", 12)
 $FONT_BOLD = New-Object System.Drawing.Font("Arial", 12, [System.Drawing.FontStyle]::Bold)
 $FORM_MAIN_TEXT = "Lunch Picker"
 $FORM_MAIN_SIZE_X = 485
-$FORM_MAIN_SIZE_Y = 387
+$FORM_MAIN_SIZE_Y = 332
 
 #main form
 $mainForm = New-Object Windows.Forms.Form
@@ -264,9 +260,9 @@ $selectLabel.Location = New-Object System.Drawing.Point(9, 237)
 #yelp button
 $yelpButton = New-Object System.Windows.Forms.Button
 $yelpButton.Font = $FONT_BOLD
-$yelpButton.Text = "Yelp Page"
-$yelpButton.Size = New-Object System.Drawing.Size(100, 25)
-$yelpButton.Location = New-Object System.Drawing.Point(114, 268)
+$yelpButton.Text = "Details"
+$yelpButton.Size = New-Object System.Drawing.Size(90, 25)
+$yelpButton.Location = New-Object System.Drawing.Point(370, 145)
 $yelpButton.Add_Click({
     $locationName = $locName
     "location name: $locationName" | Out-Host
@@ -276,9 +272,9 @@ $yelpButton.Add_Click({
 #google maps button
 $mapsButton = New-Object System.Windows.Forms.Button
 $mapsButton.Font = $FONT_BOLD
-$mapsButton.Text = "Google Maps"
-$mapsButton.Size = New-Object System.Drawing.Size(125, 25)
-$mapsButton.Location = New-Object System.Drawing.Point(219, 268)
+$mapsButton.Text = "Map"
+$mapsButton.Size = New-Object System.Drawing.Size(90, 25)
+$mapsButton.Location = New-Object System.Drawing.Point(370, 180)
 $mapsButton.Add_Click({MapsButtonPressed -selectLabel $selectLabel})
 
 #more options button
@@ -286,21 +282,23 @@ $moreOptionsButton = New-Object System.Windows.Forms.Button
 $moreOptionsButton.Font = $FONT_BOLD
 $moreOptionsButton.Text = "Get More Options"
 $moreOptionsButton.Size = New-Object System.Drawing.Size(155, 25)
-$moreOptionsButton.Location = New-Object System.Drawing.Point(9, 299)
+$moreOptionsButton.Location = New-Object System.Drawing.Point(9, 268)
 $moreOptionsButton.Add_Click({
-    $selectLabel.Text = "Please Wait..."
-    
-    #get page
-    GetPage -locationName $locationName -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -imgList ([ref] $imgList) -startIndex ([ref] $resIndex)
+    if ($selectLabel.Text -ne "") {
+        $selectLabel.Text = "Please Wait..."
+        
+        #get page
+        GetPage -locationName $locationName -resList ([ref] $resList) -resLocList ([ref] $resLocList) -resListFormatted ([ref] $resListFormatted) -imgList ([ref] $imgList) -startIndex ([ref] $resIndex)
 
-    #add new options
-    for ($i = $resIndex - $NUM_PER_PAGE; $i -lt $resList.Count; ++$i) {
-        $choicesListBox.Items.Add($resList[$i])
+        #add new options
+        for ($i = $resIndex - $NUM_PER_PAGE; $i -lt $resList.Count; ++$i) {
+            $choicesListBox.Items.Add($resList[$i])
+        }
+
+        $choicesListBox.Refresh()
+
+        $selectLabel.Text = ""
     }
-
-    $choicesListBox.Refresh()
-
-    $selectLabel.Text = ""
 })
 
 #random selection button
@@ -308,19 +306,21 @@ $randomButton = New-Object System.Windows.Forms.Button
 $randomButton.Font = $FONT_BOLD
 $randomButton.Text = "Random"
 $randomButton.Size = New-Object System.Drawing.Size(100, 25)
-$randomButton.Location = New-Object System.Drawing.Point(169, 299)
+$randomButton.Location = New-Object System.Drawing.Point(169, 268)
 $randomButton.Add_Click({
-    $selectLabel.Text = RandomButtonPressed -resList $resList -choicesListBox $choicesListBox
+    if ($selectLabel.Text -ne "") {
+        $selectLabel.Text = RandomButtonPressed -resList $resList -choicesListBox $choicesListBox
 
-    $index = $resList.IndexOf($selectLabel.Text)
+        $index = $resList.IndexOf($selectLabel.Text)
     
-    [String] $fileLoc = ""
+        [String] $fileLoc = ""
     
-    FormatImg $imgList[$index] ([ref] $fileLoc)
+        FormatImg $imgList[$index] ([ref] $fileLoc)
 
-    $image = [system.drawing.image]::FromFile($fileLoc)
-    $optionImage.BackgroundImage = $image
-    $optionImage.BackgroundImageLayout = "None"
+        $image = [system.drawing.image]::FromFile($fileLoc)
+        $optionImage.BackgroundImage = $image
+        $optionImage.BackgroundImageLayout = "None"
+    }
 })
 
 #close button
@@ -328,7 +328,7 @@ $closeButton = New-Object System.Windows.Forms.Button
 $closeButton.Font = $FONT_BOLD
 $closeButton.Text = "Close"
 $closeButton.Size = New-Object System.Drawing.Size(70, 25)
-$closeButton.Location = New-Object System.Drawing.Point(274, 299)
+$closeButton.Location = New-Object System.Drawing.Point(274, 268)
 $closeButton.Add_Click({$mainForm.Close()})
 
 #option image
